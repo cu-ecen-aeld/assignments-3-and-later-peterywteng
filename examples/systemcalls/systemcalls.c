@@ -21,7 +21,7 @@ bool do_system(const char *cmd)
     int ret = system(cmd);
     //printf("system(%s) = %d\n", cmd, ret);
     if (ret == 0) {
-        ret = 1;
+        ret = true;
     }
 
     return ret;
@@ -81,11 +81,13 @@ bool do_exec(int count, ...)
        printf("fork() Failed\n");
     }
 
-    int ret=1;
+    int ret;
     ret = execv(command[0], command);
     //printf("execv(%s, ...) = %d\n", command[0], ret);
     if (ret < 0) {
-        ret = 0;
+        ret = false;
+    } else {
+        ret = true;
     }
 
     va_end(args);
@@ -146,10 +148,12 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
        printf("fork() Failed\n");
     }
 
-    int ret=1;
+    int ret;
     ret = execv(command[0], command);
     if (ret < 0) {
-        ret = 0;
+        ret = false;
+    } else {
+        ret = true;
     }
 
     va_end(args);
