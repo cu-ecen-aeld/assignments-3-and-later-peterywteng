@@ -1,4 +1,6 @@
 #include "systemcalls.h"
+#include <stdlib.h>  // system()
+#include <unistd.h>  // execv()
 
 /**
  * @param cmd the command to execute with system()
@@ -16,8 +18,13 @@ bool do_system(const char *cmd)
  *   and return a boolean true if the system() call completed with success
  *   or false() if it returned a failure
 */
+    int ret = system(cmd);
+    //printf("system(%s) = %d\n", cmd, ret);
+    if (ret == 0) {
+        ret = 1;
+    }
 
-    return true;
+    return ret;
 }
 
 /**
@@ -59,9 +66,31 @@ bool do_exec(int count, ...)
  *
 */
 
+    pid_t pid = 0;
+    pid = fork();
+    if(pid==0)
+    {
+       //child process
+    }
+    else if(pid>0)
+    {
+       //parent process
+    }
+    else
+    {
+       printf("fork() Failed\n");
+    }
+
+    int ret=1;
+    ret = execv(command[0], command);
+    //printf("execv(%s, ...) = %d\n", command[0], ret);
+    if (ret < 0) {
+        ret = 0;
+    }
+
     va_end(args);
 
-    return true;
+    return ret;
 }
 
 /**
@@ -75,14 +104,23 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
     va_start(args, count);
     char * command[count+1];
     int i;
-    for(i=0; i<count; i++)
+
+    command[0] = va_arg(args, char *);
+    command[1] = "-c";
+
+    /*for(i=0; i<count; i++)
     {
         command[i] = va_arg(args, char *);
     }
-    command[count] = NULL;
+    command[count] = NULL;*/
+    for(i=2; i<count+1; i++)
+    {
+        command[i] = va_arg(args, char *);
+    }
+    command[count+1] = NULL;
     // this line is to avoid a compile warning before your implementation is complete
     // and may be removed
-    command[count] = command[count];
+    //command[count] = command[count];
 
 
 /*
@@ -93,7 +131,28 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
  *
 */
 
+    pid_t pid = 0;
+    pid = fork();
+    if(pid==0)
+    {
+       //child process
+    }
+    else if(pid>0)
+    {
+       //parent process
+    }
+    else
+    {
+       printf("fork() Failed\n");
+    }
+
+    int ret=1;
+    ret = execv(command[0], command);
+    if (ret < 0) {
+        ret = 0;
+    }
+
     va_end(args);
 
-    return true;
+    return ret;
 }

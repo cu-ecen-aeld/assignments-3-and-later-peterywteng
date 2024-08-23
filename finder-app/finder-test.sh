@@ -48,9 +48,13 @@ then
 		exit 1
 	fi
 fi
-echo "Removing the old writer utility and compiling as a native application"
-make clean
-make
+# Assignment 3 Part 1 Instructions:
+# Modify your finder-app/finder-test.sh script to remove the make step.
+# You will add a cross-compile make step for this utilty 
+# in a different script as a part of Assignment 3 part 2.
+#echo "Removing the old writer utility and compiling as a native application"
+#make clean
+#make
 
 for i in $( seq 1 $NUMFILES)
 do
