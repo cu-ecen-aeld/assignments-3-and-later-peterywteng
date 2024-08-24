@@ -1,6 +1,10 @@
 #include "systemcalls.h"
 #include <stdlib.h>  // system()
-#include <unistd.h>  // execv()
+#include <unistd.h>  // execv(), dup2()
+#include <sys/wait.h>  // waitpid()
+#include <errno.h>  // errno
+#include <string.h>  // strerror()
+#include <fcntl.h>  // O_CREAT, O_WRONLY
 
 /**
  * @param cmd the command to execute with system()
@@ -18,11 +22,15 @@ bool do_system(const char *cmd)
  *   and return a boolean true if the system() call completed with success
  *   or false() if it returned a failure
 */
-    int ret = system(cmd);
-    //printf("system(%s) = %d\n", cmd, ret);
-    if (ret == 0) {
+
+    bool ret = false;
+    if ( system(cmd) != -1 ) {
         ret = true;
+    } else {
+        printf("%s: system(%s) error!\n", __func__, cmd);
     }
+
+    //printf("system(%s) = %d\n", cmd, ret);
 
     return ret;
 }
@@ -66,32 +74,48 @@ bool do_exec(int count, ...)
  *
 */
 
-    pid_t pid = 0;
-    pid = fork();
-    if(pid==0)
-    {
-       //child process
-    }
-    else if(pid>0)
-    {
-       //parent process
-    }
-    else
-    {
-       printf("fork() Failed\n");
-    }
+    /* Child process: run command
+       Parent process: wait child process; return true only when waitpid & WIFEXITED return ok */
+    pid_t pid, pid_wait;
+    int status;
+    bool ret = false;
+    int reti;
 
-    int ret;
-    ret = execv(command[0], command);
-    //printf("execv(%s, ...) = %d\n", command[0], ret);
-    if (ret < 0) {
-        ret = false;
+    fflush(stdout);  // avoid duplicate prints using fork()
+    pid = fork();  // create child process
+    if ( pid < 0 ) {
+        printf("%s: fork() error - returning %d", __func__, pid);
+
+    } else if ( pid > 0 ) {
+        printf("%s: This is parent process of pid#%d\n", __func__, pid);
+        pid_wait = waitpid(pid, &status, 0);
+
+        printf("%s: Child process pid#%d terminated with WIFEXITED(status)=%d and WEXITSTATUS=%d\n", __func__, pid_wait, WIFEXITED(status), WEXITSTATUS(status));
+
+        if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) {
+            return false;
+        } else {
+            ret = true;
+        }
+
     } else {
-        ret = true;
+        printf("%s: This is child process (pid#%d)\n", __func__, pid);
+        reti = execv(command[0], command);
+        if ( reti < 0 ) {
+            printf("%s: execv(%s, ...) error - returning %d\n", __func__, command[0], reti);
+            printf("%s: Errorno: %d (%s)\n", __func__, errno, strerror(errno));
+            //printf("%s: The exec() function should have returned false since echo was not specified\n", __func__);
+            printf("%s: Ready to exit due to error!\n", __func__);
+            exit(EXIT_FAILURE);  // if return -1, parent process will return 0
+        } else {
+            printf("%s: execv(%s, ...) passed - returning %d\n", __func__, command[0], reti);
+            ret = true;
+        }
     }
 
     va_end(args);
 
+    printf("%s: return %s\n", __func__, ret ? "true" : "false");
     return ret;
 }
 
@@ -106,23 +130,14 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
     va_start(args, count);
     char * command[count+1];
     int i;
-
-    command[0] = va_arg(args, char *);
-    command[1] = "-c";
-
-    /*for(i=0; i<count; i++)
+    for(i=0; i<count; i++)
     {
         command[i] = va_arg(args, char *);
     }
-    command[count] = NULL;*/
-    for(i=2; i<count+1; i++)
-    {
-        command[i] = va_arg(args, char *);
-    }
-    command[count+1] = NULL;
+    command[count] = NULL;
     // this line is to avoid a compile warning before your implementation is complete
     // and may be removed
-    //command[count] = command[count];
+    command[count] = command[count];
 
 
 /*
@@ -133,30 +148,79 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
  *
 */
 
-    pid_t pid = 0;
-    pid = fork();
-    if(pid==0)
-    {
-       //child process
-    }
-    else if(pid>0)
-    {
-       //parent process
-    }
-    else
-    {
-       printf("fork() Failed\n");
+    /* Child process: run command -> output to "outputfile"
+       Parent process: wait child process; return true only when waitpid & WIFEXITED return ok */
+    pid_t pid, pid_wait;
+    int status;
+    bool ret = false;
+    int reti;
+
+    int fd=open(outputfile, 
+                O_CREAT|O_WRONLY,
+                0644);
+    if( fd == -1 ) {
+        printf("%s: Error %d (%s) opening %s\n", __func__, errno, strerror(errno), outputfile);
+        close(fd);
+        return false;
     }
 
-    int ret;
-    ret = execv(command[0], command);
-    if (ret < 0) {
-        ret = false;
+
+    fflush(stdout);  // avoid duplicate prints using fork()
+    pid = fork();  // create child process
+    if ( pid < 0 ) {
+        printf("%s: fork() error - returning %d", __func__, pid);
+    } else if ( pid > 0 ) {
+        printf("%s: This is parent process of pid#%d\n", __func__, pid);
+        pid_wait = waitpid(pid, &status, 0);
+
+        printf("%s: Child process pid#%d terminated with WIFEXITED(status)=%d and WEXITSTATUS=%d\n", __func__, pid_wait, WIFEXITED(status), WEXITSTATUS(status));
+
+        if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) {
+            return false;
+        } else {
+            ret = true;
+        }
+
     } else {
-        ret = true;
+        printf("%s: This is child process (pid#%d)\n", __func__, pid);
+
+        // redirect stdout(1) to fd
+        if ( dup2(fd, 1) < 0 ) {
+            printf("%s: dup2() error!\n", __func__);
+            close(fd);
+            return false;
+        } else {
+            close(fd);  // why close(fd) before run execv()?
+        }
+
+        reti = execv(command[0], command);
+        if ( reti < 0 ) {
+            printf("%s: execv(%s, ...) error - returning %d\n", __func__, command[0], reti);
+            printf("%s: Errorno: %d (%s)\n", __func__, errno, strerror(errno));
+            //printf("%s: The exec() function should have returned false since echo was not specified\n", __func__);
+            printf("%s: Ready to exit due to error!\n", __func__);
+            exit(EXIT_FAILURE);  // if return -1, parent process will return 0
+        } else {
+            printf("%s: execv(%s, ...) passed - returning %d\n", __func__, command[0], reti);
+            ret = true;
+        }
     }
 
     va_end(args);
 
     return ret;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 }
